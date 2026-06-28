@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>로컬 멀티 테트리스</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow: hidden; }
+        h1 { margin-top: 50px; }
+        #game-container { display: flex; gap: 20px; width: 100%; max-width: 600px; padding: 20px; justify-content: center; flex-wrap: wrap; }
+        .player-board { background: var(--panel); border-radius: 8px; padding: 15px; text-align: center; }
+        canvas { background: #000; border: 2px solid #334155; width: 100%; max-width: 250px; height: auto; display: block; margin: 0 auto; }
+        #lobby { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
+        button { padding: 15px 30px; margin: 10px; border-radius: 8px; border: none; background: #3b82f6; color: white; font-size: 1.2rem; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #2563eb; }
+        input { padding: 10px; font-size: 1.2rem; border-radius: 8px; border: none; width: 80%; max-width: 300px; text-align: center; margin-bottom: 10px; }
+        .info-text { color: #94a3b8; font-size: 0.9rem; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="lobby">
+    <h1>로컬 테트리스 대결</h1>
+    <input type="text" id="room-id" placeholder="방 번호 입력 (호스트는 비워두세요)">
+    <button onclick="initGame()">게임 시작 / 입장</button>
+</div>
+
+<div id="game-container">
+    <div class="player-board">
+        <h3>내 화면</h3>
+        <canvas id="board-me" width="250" height="500"></canvas>
+    </div>
+    <div class="player-board">
+        <h3>상대 화면</h3>
+        <canvas id="board-opponent" width="250" height="500"></canvas>
+    </div>
+</div>
+
+<script>
+    let peer, conn;
+    const canvasMe = document.getElementById('board-me');
+    const ctxMe = canvasMe.getContext('2d');
+    
+    const canvasOpp = document.getElementById('board-opponent');
+    const ctxOpp = canvasOpp.getContext('2d');
+    
+    const COLS = 10;
+    const ROWS = 20;
+    const BLOCK_SIZE = 25; // 25px * 10 = 250px (가로), 25px * 20 = 500px (세로)
+    
+    let myBoard = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+
+    // 로비 숨기고 게임 시작
+    function initGame() {
+        const roomId = document.getElementById('room-id').value;
+        peer = new Peer(roomId || undefined);
+
+        peer.on('open', (id) => {
+            alert("방 번호: " + id + "\n이 번호를 친구들에게 알려주세요!");
+            document.getElementById('lobby').style.display = 'none';
+        });
+
+        peer.on('connection', (connection) => {
+            conn = connection;
+            setupConnection();
+        });
+
+        if (roomId) {
+            conn = peer.connect(roomId);
+            setupConnection();
+        }
+    }
+
+    // 상대방 연결 수립 및 데이터 처리
+    function setupConnection() {
+        conn.on('open', () => {
+            console.log("연결 완료!");
+        });
+
+        conn.on('data', (data) => {
+            if (data.type === 'board') {
+                drawOpponentBoard(data.board);
+            }
+        });
+    }
+
+    // 데이터 전송 예시 (내 보드 상태를 상대에게 보냄)
+    function sendBoardState() {
+        if (conn && conn.open) {
+            conn.send({ type: 'board', board: myBoard });
+        }
+    }
+
+    // 캔버스 그리기 함수들
+    function drawBlock(ctx, x, y, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        ctx.strokeStyle = '#334155';
+        ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    }
+
+    function drawBoard(ctx, board) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvasMe.width, canvasMe.height);
+        
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (board[r][c] !== 0) {
+                    drawBlock(ctx, c, r, board[r][c]);
+                }
+            }
+        }
+    }
+
+    function drawOpponentBoard(board) {
+        drawBoard(ctxOpp, board);
+    }
+
+    // 렌더링 루프
+    function gameLoop() {
+        drawBoard(ctxMe, myBoard);
+        // sendBoardState(); // 필요시 통신에 사용
+    }
+
+    // 테스트용 예시 데이터 적용
+    myBoard[19][0] = '#3b82f6'; // 맨 아래 왼쪽 블록
+    myBoard[19][9] = '#3b82f6'; // 맨 아래 오른쪽 블록
+
+    setInterval(gameLoop, 1000 / 30);
+</script>
+</body>
+</html>
